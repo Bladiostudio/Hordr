@@ -1,0 +1,24 @@
+struct Vec2 {
+    x: number
+    y: number
+}
+
+enum Axis {
+    X
+    Y
+}
+
+fn len(v: {x: number, y: number}): number {
+    return (v.x * v.x + v.y * v.y) ^ 0.5
+}
+
+fn main() {
+    let v: Vec2 = Vec2.new(3, 4)
+    let a = Axis.X
+
+    match a {
+        case Axis.X => return len(v)
+        case Axis.Y => return len({ x = v.y, y = v.x })
+        case _ => return 0
+    }
+}
