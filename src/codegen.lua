@@ -1,32 +1,26 @@
--- Generates readable Lua/Luau code from AST
+-- turns the AST back into Lua
 local Codegen = {}
 
--- Creates a buffered writer with indentation state
 local function new_writer()
     return { buf = {}, indent = 0 }
 end
 
--- Appends raw text to the output buffer
 local function write(w, s)
     w.buf[#w.buf + 1] = s
 end
 
--- Writes an indented line
 local function writeln(w, s)
     write(w, string.rep("    ", w.indent) .. s .. "\n")
 end
 
--- Increases indentation level
 local function indent(w)
     w.indent = w.indent + 1
 end
 
--- Decreases indentation level
 local function dedent(w)
     w.indent = w.indent - 1
 end
 
--- Operator precedence table for formatting
 local prec = {
     ["or"] = 1,
     ["and"] = 2,
@@ -47,7 +41,6 @@ local prec = {
     ["primary"] = 10,
 }
 
--- Removes quotes around identifier-like strings
 local function strip_quotes(s)
     if s:sub(1, 1) == "\"" and s:sub(-1) == "\"" then
         return s:sub(2, -2)
@@ -55,7 +48,6 @@ local function strip_quotes(s)
     return s
 end
 
--- Emits Lua for an expression with correct precedence
 local function expr_to_lua(expr, parent_prec)
     parent_prec = parent_prec or 0
     local kind = expr.kind
@@ -128,7 +120,6 @@ local function expr_to_lua(expr, parent_prec)
     error("unknown expr kind: " .. tostring(kind))
 end
 
--- Emits a block with proper indentation
 local function emit_block(w, block)
     indent(w)
     for _, stmt in ipairs(block) do
@@ -137,7 +128,6 @@ local function emit_block(w, block)
     dedent(w)
 end
 
--- Emits a struct constructor as a plain table
 local function emit_struct(w, stmt)
     writeln(w, "local " .. stmt.name .. " = {}")
     local params = {}
@@ -153,7 +143,6 @@ local function emit_struct(w, stmt)
     writeln(w, "end")
 end
 
--- Emits an enum as a table of constants
 local function emit_enum(w, stmt)
     local items = {}
     local next_value = 1
@@ -165,17 +154,14 @@ local function emit_enum(w, stmt)
     writeln(w, "local " .. stmt.name .. " = { " .. table.concat(items, ", ") .. " }")
 end
 
--- Checks whether a match subject can be inlined
 local function is_simple_match_expr(expr)
     return expr.kind == "Ident" or expr.kind == "Number" or expr.kind == "String" or expr.kind == "Boolean" or expr.kind == "Nil"
 end
 
--- Emits an export assignment to module table
 local function emit_export_binding(w, stmt)
     writeln(w, "M." .. stmt.name .. " = " .. stmt.name)
 end
 
--- Emits a single statement
 function Codegen.emit_stmt(w, stmt)
     local kind = stmt.kind
     if kind == "Let" then
@@ -290,7 +276,6 @@ function Codegen.emit_stmt(w, stmt)
     end
 end
 
--- Generates Lua source for a full AST
 function Codegen.generate(ast)
     local w = new_writer()
     if ast.module then
