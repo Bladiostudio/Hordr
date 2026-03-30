@@ -1,8 +1,9 @@
--- Flow-sensitive analysis and semantic checks
+-- semantic checks + some flow stuff
 local Diagnostics = require("src.diagnostics")
 local Analyzer = {}
 
--- Allowed global reads in plain Lua
+-- TODO: split some of this later maybe
+
 local default_globals = {
     _G = true,
     assert = true,
@@ -27,12 +28,10 @@ local default_globals = {
     require = true,
 }
 
--- Creates a scope for locals and enums
 local function new_scope(parent)
     return { parent = parent, locals = {}, enums = {} }
 end
 
--- Finds a local by name up the scope chain
 local function scope_lookup(scope, name)
     while scope do
         if scope.locals[name] then
@@ -43,7 +42,6 @@ local function scope_lookup(scope, name)
     return nil, nil
 end
 
--- Finds an enum declaration by name
 local function enum_lookup(scope, name)
     while scope do
         if scope.enums[name] then
@@ -54,7 +52,6 @@ local function enum_lookup(scope, name)
     return nil
 end
 
--- Records an error diagnostic
 local function add_error(state, a, b, c)
     local span, msg, hints
     if b ~= nil then
@@ -69,7 +66,6 @@ local function add_error(state, a, b, c)
     Diagnostics.error(state.diagnostics, span, msg, hints)
 end
 
--- Records a warning diagnostic
 local function add_warning(state, a, b, c)
     local span, msg, hints
     if b ~= nil then
@@ -84,7 +80,6 @@ local function add_warning(state, a, b, c)
     Diagnostics.warn(state.diagnostics, span, msg, hints)
 end
 
--- Marks a local as used if it exists
 local function mark_used(scope, name)
     local info = scope_lookup(scope, name)
     if info then
@@ -94,7 +89,6 @@ local function mark_used(scope, name)
     return false
 end
 
--- Declares a local and tracks shadowing
 local function declare_local(state, scope, name, info)
     if name == "_" then
         return
@@ -117,7 +111,6 @@ local function declare_local(state, scope, name, info)
     }
 end
 
--- Marks a local as assigned and updates nilness
 local function set_assigned(scope, name, nilness)
     local info = scope_lookup(scope, name)
     if info then
@@ -126,7 +119,6 @@ local function set_assigned(scope, name, nilness)
     end
 end
 
--- Emits warnings for unused locals
 local function check_unused(state, scope)
     for name, info in pairs(scope.locals) do
         if name ~= "_" and not info.used then
@@ -135,7 +127,6 @@ local function check_unused(state, scope)
     end
 end
 
--- Merges nilness across control-flow paths
 local function nilness_merge(a, b)
     if a == "non_nil" and b == "non_nil" then
         return "non_nil"
@@ -146,7 +137,6 @@ local function nilness_merge(a, b)
     return "maybe_nil"
 end
 
--- Takes a snapshot of assignment state
 local function snapshot(scope)
     local snap = {}
     for name, info in pairs(scope.locals) do
@@ -155,7 +145,6 @@ local function snapshot(scope)
     return snap
 end
 
--- Restores assignment state from a snapshot
 local function restore(scope, snap)
     for name, info in pairs(scope.locals) do
         local s = snap[name]
@@ -166,7 +155,6 @@ local function restore(scope, snap)
     end
 end
 
--- Merges two snapshots conservatively
 local function merge_snapshots(a, b)
     local out = {}
     for name, sa in pairs(a) do
@@ -183,7 +171,6 @@ local function merge_snapshots(a, b)
     return out
 end
 
--- Estimates nilness for simple expressions
 local function expr_nilness(scope, expr)
     local kind = expr.kind
     if kind == "Number" or kind == "String" or kind == "Boolean" then
@@ -212,7 +199,6 @@ local function expr_nilness(scope, expr)
     return "unknown"
 end
 
--- Evaluates simple constant expressions
 local function const_value(expr)
     local kind = expr.kind
     if kind == "Number" then
@@ -292,7 +278,6 @@ local function const_value(expr)
     return nil
 end
 
--- Computes constant truthiness when possible
 local function const_truthiness(expr)
     local v = const_value(expr)
     if not v then
@@ -307,7 +292,6 @@ local function const_truthiness(expr)
     return true
 end
 
--- Narrows nilness based on simple conditions
 local function narrow_nil(scope, expr, truthy)
     if expr.kind == "Binary" and (expr.op == "==" or expr.op == "~=") then
         if expr.left.kind == "Ident" and expr.right.kind == "Nil" then
@@ -332,7 +316,6 @@ local function narrow_nil(scope, expr, truthy)
     end
 end
 
--- Analyzes expressions for use/undef and nil misuse
 local function analyze_expr(state, scope, expr, module_env)
     local kind = expr.kind
     if kind == "Ident" then
@@ -387,7 +370,6 @@ local function analyze_expr(state, scope, expr, module_env)
     end
 end
 
--- Validates assignment targets
 local function analyze_lvalue(state, scope, target, module_env)
     if target.kind == "Ident" then
         local info = scope_lookup(scope, target.name)
@@ -411,7 +393,6 @@ end
 
 local analyze_block
 
--- Analyzes a single statement and return flow
 local function analyze_stmt(state, scope, stmt, in_function, module_env)
     local function no_return()
         return { always_returns = false, any_with = false, any_without = false }
@@ -462,11 +443,9 @@ local function analyze_stmt(state, scope, stmt, in_function, module_env)
             declare_local(state, fn_scope, p.name, { assigned = true, nilness = nilness, type_name = type_name, span = p.span })
         end
         local info = analyze_block(state, fn_scope, stmt.body, true, module_env)
-        -- Require consistent return shape when any return value is used
         if info.any_with and info.any_without then
             add_error(state, stmt.name_span, "Inconsistent return values in function '" .. stmt.name .. "'")
         end
-        -- Enforce complete return paths for typed functions
         if (stmt.ret_type or info.any_with) and not info.always_returns then
             add_error(state, stmt.name_span, "Missing return on some paths in function '" .. stmt.name .. "'")
         end
@@ -658,7 +637,7 @@ local function analyze_stmt(state, scope, stmt, in_function, module_env)
             any_without = any_without or info.any_without
         end
 
-        -- Enum matches must cover all variants unless wildcard is present
+        -- should cover all enum values here
         if enum_items and not has_wildcard then
             local missing = {}
             for _, item in ipairs(enum_items) do
@@ -681,7 +660,6 @@ local function analyze_stmt(state, scope, stmt, in_function, module_env)
     return no_return()
 end
 
--- Analyzes a block of statements for flow and warnings
 analyze_block = function(state, scope, block, in_function, module_env)
     local info = { always_returns = false, any_with = false, any_without = false }
     for _, stmt in ipairs(block) do
@@ -699,7 +677,6 @@ analyze_block = function(state, scope, block, in_function, module_env)
     return info
 end
 
--- Runs analysis on a full AST
 function Analyzer.analyze(ast, module_env, diagnostics)
     local state = { diagnostics = diagnostics or Diagnostics.new(), allowed_globals = {} }
     local scope = new_scope(nil)
