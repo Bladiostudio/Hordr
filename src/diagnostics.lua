@@ -1,7 +1,6 @@
--- Collects and formats compiler diagnostics across phases
+-- small helper for errors/warnings
 local Diagnostics = {}
 
--- Builds a minimal span when only token coordinates are known
 local function new_span(file, line, col, end_line, end_col)
     return {
         file = file or "<input>",
@@ -12,7 +11,6 @@ local function new_span(file, line, col, end_line, end_col)
     }
 end
 
--- Sorts spans in source order for stable output
 local function compare(a, b)
     if a.file ~= b.file then
         return a.file < b.file
@@ -29,34 +27,28 @@ local function compare(a, b)
     return a.end_col < b.end_col
 end
 
--- Creates a diagnostics container
 function Diagnostics.new()
     return { list = {} }
 end
 
--- Records an error diagnostic
 function Diagnostics.error(diag, span, message, hints)
     diag.list[#diag.list + 1] = { severity = "error", span = span, message = message, hints = hints }
 end
 
--- Records a warning diagnostic
 function Diagnostics.warn(diag, span, message, hints)
     diag.list[#diag.list + 1] = { severity = "warning", span = span, message = message, hints = hints }
 end
 
--- Records a note diagnostic
 function Diagnostics.note(diag, span, message, hints)
     diag.list[#diag.list + 1] = { severity = "note", span = span, message = message, hints = hints }
 end
 
--- Appends diagnostics from another container
 function Diagnostics.merge(diag, other)
     for _, d in ipairs(other.list) do
         diag.list[#diag.list + 1] = d
     end
 end
 
--- Checks whether any error diagnostics were recorded
 function Diagnostics.has_errors(diag)
     for _, d in ipairs(diag.list) do
         if d.severity == "error" then
@@ -66,7 +58,6 @@ function Diagnostics.has_errors(diag)
     return false
 end
 
--- Counts error diagnostics
 function Diagnostics.count_errors(diag)
     local n = 0
     for _, d in ipairs(diag.list) do
@@ -77,7 +68,6 @@ function Diagnostics.count_errors(diag)
     return n
 end
 
--- Groups diagnostics by file and sorts by span
 function Diagnostics.group_by_file(diag)
     local groups = {}
     for _, d in ipairs(diag.list) do
@@ -95,7 +85,6 @@ function Diagnostics.group_by_file(diag)
     return groups
 end
 
--- Formats diagnostics as a stable, human-readable string
 function Diagnostics.format(diag)
     local groups = Diagnostics.group_by_file(diag)
     local files = {}
