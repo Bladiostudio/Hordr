@@ -1,4 +1,4 @@
--- Compiler entry points for single files and module sets
+-- main compiler entry
 local Lexer = require("src.lexer")
 local Parser = require("src.parser")
 local Analyzer = require("src.analyzer")
@@ -9,14 +9,12 @@ local Diagnostics = require("src.diagnostics")
 
 local M = {}
 
--- Parses source into an AST with spans
 local function parse_source(source, file)
     local tokens = Lexer.lex(source, file)
     local parser = Parser.new(tokens)
     return parser:parse_program()
 end
 
--- Compiles a single source file to Lua
 function M.compile(source, opts)
     opts = opts or {}
     local diagnostics = Diagnostics.new()
@@ -46,7 +44,6 @@ function M.compile(source, opts)
     return out, diagnostics
 end
 
--- Collects exported names for module checks
 local function build_exports(ast)
     local exports = {}
     local errors = {}
@@ -62,7 +59,6 @@ local function build_exports(ast)
     return exports, errors
 end
 
--- Derives a default import alias from a module name
 local function default_alias(module_name)
     local parts = {}
     for part in module_name:gmatch("[^%.]+") do
@@ -71,7 +67,6 @@ local function default_alias(module_name)
     return parts[#parts] or module_name
 end
 
--- Detects direct and indirect import cycles
 local function detect_cycles(graph)
     local temp = {}
     local perm = {}
@@ -103,7 +98,6 @@ local function detect_cycles(graph)
     return errors
 end
 
--- Compiles a set of modules keyed by module name
 function M.compile_modules(sources, opts)
     opts = opts or {}
     local asts = {}
