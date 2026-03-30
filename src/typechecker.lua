@@ -1,48 +1,41 @@
--- Structural type checker with Luau-compatible rules
+-- type checker
 local Diagnostics = require("src.diagnostics")
 local TypeChecker = {}
 
--- Constructs the top type
+-- TODO: split some of this later maybe
+
 local function t_any()
     return { kind = "any" }
 end
 
--- Constructs the bottom type
 local function t_never()
     return { kind = "never" }
 end
 
--- Constructs nil type
 local function t_nil()
     return { kind = "nil" }
 end
 
--- Constructs a primitive type
 local function t_primitive(name)
     return { kind = name }
 end
 
--- Constructs an enum type
 local function t_enum(name, items)
     return { kind = "enum", name = name, items = items }
 end
 
--- Constructs a structural table type
 local function t_struct(fields)
     return { kind = "struct", fields = fields }
 end
 
--- Constructs a struct constructor value type
 local function t_struct_ctor(name, instance, ctor_params)
     return { kind = "struct_ctor", name = name, instance = instance, ctor_params = ctor_params or {} }
 end
 
--- Constructs a function type
 local function t_func(params, ret)
     return { kind = "func", params = params, ret = ret }
 end
 
--- Constructs a union type with flattening
 local function t_union(types)
     local flat = {}
     local seen = {}
@@ -78,7 +71,6 @@ local function t_union(types)
     return { kind = "union", types = flat }
 end
 
--- Checks whether a type includes nil
 local function is_nilable(t)
     if t.kind == "nil" then
         return true
@@ -93,7 +85,6 @@ local function is_nilable(t)
     return false
 end
 
--- Removes nil from a union type
 local function remove_nil(t)
     if t.kind == "nil" then
         return t_never()
@@ -110,7 +101,6 @@ local function remove_nil(t)
     return t_union(out)
 end
 
--- Formats a type for diagnostics
 local function type_to_string(t)
     if t.kind == "any" or t.kind == "never" or t.kind == "nil" then
         return t.kind
@@ -150,7 +140,6 @@ local function type_to_string(t)
     return "<unknown>"
 end
 
--- Checks structural assignability
 local function is_assignable(src, dst)
     if dst.kind == "any" or src.kind == "never" then
         return true
@@ -208,7 +197,6 @@ local function is_assignable(src, dst)
     return false
 end
 
--- Converts a type AST into a checker type
 local function type_from_ast(node, types)
     if not node then
         return t_any()
@@ -255,12 +243,10 @@ local function type_from_ast(node, types)
     return t_any()
 end
 
--- Creates a scope for local types
 local function new_scope(parent)
     return { parent = parent, locals = {} }
 end
 
--- Looks up a name in the type scope
 local function scope_lookup(scope, name)
     while scope do
         if scope.locals[name] then
@@ -271,17 +257,14 @@ local function scope_lookup(scope, name)
     return nil
 end
 
--- Declares a name in the type scope
 local function declare(scope, name, t)
     scope.locals[name] = t
 end
 
--- Records a type error
 local function error_at(state, span, msg, hints)
     Diagnostics.error(state.diagnostics, span, msg, hints)
 end
 
--- Returns the type of a literal expression
 local function type_of_literal(expr)
     if expr.kind == "Number" then
         return t_primitive("number")
@@ -295,7 +278,6 @@ local function type_of_literal(expr)
     return t_any()
 end
 
--- Infers expression types and checks local constraints
 local function type_of_expr(state, scope, expr, types, module_env)
     local kind = expr.kind
     if kind == "Ident" then
@@ -401,7 +383,7 @@ local function type_of_expr(state, scope, expr, types, module_env)
             error_at(state, expr.span, "Enum '" .. expr.base.name .. "' has no member '" .. expr.key.value .. "'")
             return t_any()
         end
-        -- Struct constructors expose a .new function returning the instance type
+        -- using .new here
         if base_t.kind == "struct_ctor" and expr.dot and expr.key.kind == "String" then
             if expr.key.value == "new" then
                 return t_func(base_t.ctor_params or {}, base_t.instance)
@@ -423,7 +405,6 @@ local function type_of_expr(state, scope, expr, types, module_env)
     return t_any()
 end
 
--- Narrows union types on simple nil checks
 local function narrow_from_condition(scope, expr, positive)
     if expr.kind == "Binary" and (expr.op == "==" or expr.op == "~=") then
         if expr.left.kind == "Ident" and expr.right.kind == "Nil" then
@@ -448,14 +429,12 @@ local function narrow_from_condition(scope, expr, positive)
     end
 end
 
--- Type-checks a block with an optional return type
 local function analyze_block(state, scope, block, types, module_env, current_ret)
     for _, stmt in ipairs(block) do
         TypeChecker._stmt(state, scope, stmt, types, module_env, current_ret)
     end
 end
 
--- Type-checks a single statement
 function TypeChecker._stmt(state, scope, stmt, types, module_env, current_ret)
     local kind = stmt.kind
     if kind == "Let" then
@@ -572,7 +551,6 @@ function TypeChecker._stmt(state, scope, stmt, types, module_env, current_ret)
     end
 end
 
--- Builds exported type signatures for modules
 function TypeChecker.build_export_types(ast)
     local types = {}
     for _, stmt in ipairs(ast.body) do
@@ -622,7 +600,6 @@ function TypeChecker.build_export_types(ast)
     return exports, errors
 end
 
--- Runs the type checker on a full AST
 function TypeChecker.check(ast, module_env)
     local state = { diagnostics = Diagnostics.new() }
     local types = {}
