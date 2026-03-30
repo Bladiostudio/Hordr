@@ -1,8 +1,7 @@
--- CLI entry point for Hordr compilation
+-- cli entry file
 local compiler = require("src.main")
 local Diagnostics = require("src.diagnostics")
 
--- Reads a file as raw bytes
 local function read_file(path)
     local f, err = io.open(path, "rb")
     if not f then
@@ -13,17 +12,14 @@ local function read_file(path)
     return data
 end
 
--- Writes to stdout without formatting
 local function write_stdout(s)
     io.write(s)
 end
 
--- Writes to stderr without formatting
 local function write_stderr(s)
     io.stderr:write(s)
 end
 
--- Parses CLI arguments into options
 local function parse_args(argv)
     local opts = { input = nil, target = "luau", warnings_as_errors = false, max_errors = nil }
     local i = 1
@@ -47,7 +43,6 @@ local function parse_args(argv)
     return opts
 end
 
--- Runs the CLI with diagnostics reporting
 local function main(argv)
     local opts = parse_args(argv)
     if opts.help or not opts.input then
