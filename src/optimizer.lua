@@ -1,33 +1,29 @@
--- Applies conservative, readability-first optimizations
+-- simple optimizer passes
 local Optimizer = {}
 
--- Holds pass-local counters for unique names
+-- TODO: split some of this later maybe
+
 local function new_state()
     return { counter = 0 }
 end
 
--- Creates a unique temporary name
 local function next_temp(state, prefix)
     state.counter = state.counter + 1
     return (prefix or "_tmp") .. tostring(state.counter)
 end
 
--- Checks for numeric literals
 local function is_number(expr)
     return expr.kind == "Number"
 end
 
--- Checks for boolean literals
 local function is_boolean(expr)
     return expr.kind == "Boolean"
 end
 
--- Checks for nil literal
 local function is_nil(expr)
     return expr.kind == "Nil"
 end
 
--- Folds constant binary expressions
 local function fold_binary(op, left, right)
     if is_number(left) and is_number(right) then
         local a, b = left.value, right.value
@@ -47,7 +43,6 @@ local function fold_binary(op, left, right)
     return nil
 end
 
--- Folds constant unary expressions
 local function fold_unary(op, expr)
     if op == "-" and is_number(expr) then
         return { kind = "Number", value = -expr.value }
@@ -63,7 +58,6 @@ local function fold_unary(op, expr)
     return nil
 end
 
--- Recursively optimizes expressions
 local function optimize_expr(expr)
     local kind = expr.kind
     if kind == "Binary" then
@@ -104,7 +98,6 @@ local function optimize_expr(expr)
     return expr
 end
 
--- Collects identifiers referenced by an expression
 local function collect_idents_expr(expr, out)
     local kind = expr.kind
     if kind == "Ident" then
@@ -134,7 +127,6 @@ local function collect_idents_expr(expr, out)
     end
 end
 
--- Checks for simple, side-effect-free expressions
 local function expr_is_pure(expr)
     local kind = expr.kind
     if kind == "Ident" or kind == "Number" or kind == "String" or kind == "Boolean" or kind == "Nil" then
@@ -152,7 +144,6 @@ local function expr_is_pure(expr)
     return false
 end
 
--- Collects variables mutated in a block
 local function collect_mutations(block, out, include_let)
     for _, stmt in ipairs(block) do
         if include_let and stmt.kind == "Let" then
@@ -186,7 +177,6 @@ local function collect_mutations(block, out, include_let)
     end
 end
 
--- Rewrites expressions using a replacement callback
 local function replace_expr(expr, replacer)
     local r = replacer(expr)
     if r then
@@ -224,7 +214,6 @@ local function replace_expr(expr, replacer)
     return expr
 end
 
--- Recursively optimizes a statement in place
 local function optimize_stmt(stmt)
     local kind = stmt.kind
     if kind == "Let" then
@@ -293,14 +282,14 @@ local function optimize_stmt(stmt)
     return stmt
 end
 
--- Pass 1: constant folding
+-- constant folding first
 local function pass_constant_folding(ast)
     for i, stmt in ipairs(ast.body) do
         ast.body[i] = optimize_stmt(stmt)
     end
 end
 
--- Pass 2: hoists loop-invariant pure expressions
+-- trying to move obvious loop stuff out
 local function pass_loop_hoist(ast, state)
     local function process_block(block)
         local out = {}
@@ -365,7 +354,7 @@ local function pass_loop_hoist(ast, state)
     process_block(ast.body)
 end
 
--- Pass 3: caches repeated table field reads
+-- cache repeated field access a bit
 local function pass_local_caching(ast, state)
     local function collect_locals(block, locals, decl_pos)
         for i, stmt in ipairs(block) do
@@ -539,7 +528,6 @@ local function pass_local_caching(ast, state)
     process_block(ast.body, {})
 end
 
--- Pass 4: aliases frequently used globals
 local function pass_global_alias(ast, state)
     local globals = {
         math = true,
@@ -697,12 +685,10 @@ local function pass_global_alias(ast, state)
     process_block(ast.body)
 end
 
--- Pass 5: reserved for trivial for-loop normalization
 local function pass_for_normalization(ast)
     return
 end
 
--- Pass 6: removes trivial single-use temporaries
 local function pass_temp_removal(ast)
     local function count_uses(block, counts)
         local function scan(expr)
@@ -839,7 +825,6 @@ local function pass_temp_removal(ast)
     process_block(ast.body)
 end
 
--- Runs enabled optimization passes in order
 function Optimizer.optimize(ast, opts)
     opts = opts or {}
     local enable = opts.enable or {}
