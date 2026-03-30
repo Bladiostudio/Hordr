@@ -1,7 +1,6 @@
--- Tokenizes source text into a stream of positioned tokens
+-- lexer / tokenizer
 local Lexer = {}
 
--- Reserved keywords for the language
 local keywords = {
     ["let"] = true,
     ["global"] = true,
@@ -29,52 +28,43 @@ local keywords = {
     ["nil"] = true,
 }
 
--- Checks identifier start characters
 local function is_alpha(ch)
     return ch:match("[A-Za-z_]") ~= nil
 end
 
--- Checks identifier continuation characters
 local function is_alnum(ch)
     return ch:match("[A-Za-z0-9_]") ~= nil
 end
 
--- Checks decimal digits
 local function is_digit(ch)
     return ch:match("[0-9]") ~= nil
 end
 
--- Constructs a token with source coordinates
 local function make_token(tt, value, line, col, end_line, end_col, file)
     return { type = tt, value = value, line = line, col = col, end_line = end_line, end_col = end_col, file = file }
 end
 
--- Lexes a full source string into tokens
 function Lexer.lex(input, file)
     local tokens = {}
     local i = 1
     local line = 1
     local col = 1
 
-    -- Peeks ahead without consuming
     local function peek(n)
         n = n or 0
         return input:sub(i + n, i + n)
     end
 
-    -- Advances the cursor and updates column
     local function advance(n)
         n = n or 1
         i = i + n
         col = col + n
     end
 
-    -- Adds a token with explicit span
     local function add(tt, value, start_line, start_col, end_line, end_col)
         tokens[#tokens + 1] = make_token(tt, value, start_line, start_col, end_line, end_col, file or "<input>")
     end
 
-    -- Emits a newline token and updates line state
     local function newline()
         add("newline", "\n", line, col, line, col)
         i = i + 1
@@ -93,7 +83,7 @@ function Lexer.lex(input, file)
             newline()
         elseif ch == "-" and peek(1) == "-" then
             if peek(2) == "[" and peek(3) == "[" then
-                -- block comment
+                -- block comments
                 advance(4)
                 while i <= #input do
                     if peek(0) == "]" and peek(1) == "]" then
@@ -106,7 +96,7 @@ function Lexer.lex(input, file)
                     end
                 end
             else
-                -- line comment
+                -- normal comment
                 advance(2)
                 while i <= #input and peek(0) ~= "\n" do
                     advance(1)
