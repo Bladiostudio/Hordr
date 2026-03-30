@@ -1,12 +1,12 @@
--- Parses tokens into a syntax tree with source spans
+-- parser
 local Parser = {}
 
--- Raises a structured parse error for diagnostics
+-- TODO: split some of this later maybe
+
 local function error_at(tok, msg)
     error({ kind = "ParseError", token = tok, message = msg })
 end
 
--- Builds a span from two tokens or span-like tables
 local function span_from(a, b)
     return {
         file = a.file or "<input>",
@@ -17,7 +17,6 @@ local function span_from(a, b)
     }
 end
 
--- Builds a span from a single token
 local function span_of(tok)
     return {
         file = tok.file or "<input>",
@@ -28,25 +27,21 @@ local function span_of(tok)
     }
 end
 
--- Creates a parser over a token array
 function Parser.new(tokens)
     return setmetatable({ tokens = tokens, pos = 1 }, { __index = Parser })
 end
 
--- Peeks at a token without consuming it
 function Parser:peek(n)
     n = n or 0
     return self.tokens[self.pos + n]
 end
 
--- Consumes and returns the current token
 function Parser:next()
     local tok = self.tokens[self.pos]
     self.pos = self.pos + 1
     return tok
 end
 
--- Consumes a token if it matches the requested type and value
 function Parser:match(tt, value)
     local tok = self:peek(0)
     if tok.type ~= tt then
@@ -59,7 +54,6 @@ function Parser:match(tt, value)
     return tok
 end
 
--- Consumes a token or raises a parse error
 function Parser:expect(tt, value)
     local tok = self:peek(0)
     if tok.type ~= tt or (value and tok.value ~= value) then
@@ -69,13 +63,11 @@ function Parser:expect(tt, value)
     return tok
 end
 
--- Skips contiguous newline tokens
 function Parser:consume_newlines()
     while self:match("newline") do
     end
 end
 
--- Enforces a statement boundary or end of block
 function Parser:consume_stmt_end()
     if self:match("symbol", ";") then
         self:consume_newlines()
@@ -95,7 +87,6 @@ function Parser:consume_stmt_end()
     error_at(tok, "expected statement terminator")
 end
 
--- Parses a complete program including module header and imports
 function Parser:parse_program()
     local body = {}
     local imports = {}
@@ -123,7 +114,6 @@ function Parser:parse_program()
     return { kind = "Program", module = module_name, module_span = module_span, imports = imports, body = body }
 end
 
--- Parses a single statement
 function Parser:parse_stmt()
     local tok = self:peek(0)
     if tok.type == "keyword" then
@@ -162,7 +152,6 @@ function Parser:parse_stmt()
     return { kind = "ExprStmt", expr = expr }
 end
 
--- Parses a dotted module path and returns name + span
 function Parser:parse_module_path()
     local parts = {}
     local first = self:expect("ident")
@@ -182,7 +171,6 @@ function Parser:parse_module_path()
     return { name = table.concat(parts, "."), span = span_from(first, last) }
 end
 
--- Parses an import declaration
 function Parser:parse_import()
     local start = self:expect("keyword", "import")
     local mod = self:parse_module_path()
@@ -206,7 +194,6 @@ function Parser:parse_import()
     return { kind = "Import", module = module_name, alias = alias, names = names, span = span_from(start, mod.span) }
 end
 
--- Parses an export modifier followed by a declaration
 function Parser:parse_export()
     self:expect("keyword", "export")
     local tok = self:peek(0)
@@ -230,7 +217,6 @@ function Parser:parse_export()
     error_at(tok, "export must be followed by a declaration")
 end
 
--- Parses a local declaration
 function Parser:parse_let()
     local start = self:expect("keyword", "let")
     local name_tok = self:expect("ident")
@@ -248,7 +234,6 @@ function Parser:parse_let()
     return { kind = "Let", name = name, name_span = span_of(name_tok), type_expr = type_expr, init = init, span = span_from(start, end_span) }
 end
 
--- Parses an explicit global assignment
 function Parser:parse_global()
     local start = self:expect("keyword", "global")
     local name_tok = self:expect("ident")
@@ -259,7 +244,6 @@ function Parser:parse_global()
     return { kind = "Global", name = name, name_span = span_of(name_tok), init = init, span = span_from(start, init.span) }
 end
 
--- Parses a function declaration
 function Parser:parse_fn()
     local start = self:expect("keyword", "fn")
     local name_tok = self:expect("ident")
@@ -286,7 +270,6 @@ function Parser:parse_fn()
     return { kind = "Function", name = name, name_span = span_of(name_tok), params = params, ret_type = ret_type, body = body, span = span_from(start, span_of(name_tok)) }
 end
 
--- Parses a struct declaration
 function Parser:parse_struct()
     local start = self:expect("keyword", "struct")
     local name_tok = self:expect("ident")
@@ -306,7 +289,6 @@ function Parser:parse_struct()
     return { kind = "Struct", name = name, name_span = span_of(name_tok), fields = fields, span = span_from(start, span_of(name_tok)) }
 end
 
--- Parses an enum declaration
 function Parser:parse_enum()
     local start = self:expect("keyword", "enum")
     local name_tok = self:expect("ident")
@@ -328,7 +310,6 @@ function Parser:parse_enum()
     return { kind = "Enum", name = name, name_span = span_of(name_tok), items = items, span = span_from(start, span_of(name_tok)) }
 end
 
--- Parses an if/elseif/else statement
 function Parser:parse_if()
     local start = self:expect("keyword", "if")
     local cond = self:parse_expr()
@@ -346,7 +327,6 @@ function Parser:parse_if()
     return { kind = "If", cond = cond, then_block = then_block, elseif_blocks = elseif_blocks, else_block = else_block, span = span_from(start, cond.span) }
 end
 
--- Parses a while loop
 function Parser:parse_while()
     local start = self:expect("keyword", "while")
     local cond = self:parse_expr()
@@ -354,7 +334,6 @@ function Parser:parse_while()
     return { kind = "While", cond = cond, body = body, span = span_from(start, cond.span) }
 end
 
--- Parses a numeric or generic for loop
 function Parser:parse_for()
     local start = self:expect("keyword", "for")
     local name_tok = self:expect("ident")
@@ -376,7 +355,6 @@ function Parser:parse_for()
     return { kind = "ForIn", name = name, name_span = span_of(name_tok), iter = iter, body = body, span = span_from(start, iter.span) }
 end
 
--- Parses a return statement
 function Parser:parse_return()
     local start = self:expect("keyword", "return")
     local tok = self:peek(0)
@@ -393,7 +371,6 @@ function Parser:parse_return()
     return { kind = "Return", expr = expr, span = span_from(start, expr.span) }
 end
 
--- Parses a match statement
 function Parser:parse_match()
     local start = self:expect("keyword", "match")
     local expr = self:parse_expr()
@@ -411,7 +388,6 @@ function Parser:parse_match()
     return { kind = "Match", expr = expr, cases = cases, span = span_from(start, expr.span) }
 end
 
--- Parses a match pattern
 function Parser:parse_pattern()
     local tok = self:peek(0)
     if tok.type == "ident" and tok.value == "_" then
@@ -429,7 +405,6 @@ function Parser:parse_pattern()
         return { kind = "PatternExpr", expr = expr, span = expr.span }
 end
 
--- Parses a block delimited by braces
 function Parser:parse_block()
     self:expect("symbol", "{")
     local body = {}
@@ -441,12 +416,10 @@ function Parser:parse_block()
     return body
 end
 
--- Parses an expression with precedence
 function Parser:parse_expr()
     return self:parse_logic_or()
 end
 
--- Parses logical OR expressions
 function Parser:parse_logic_or()
     local left = self:parse_logic_and()
     while self:match("keyword", "or") do
@@ -456,7 +429,6 @@ function Parser:parse_logic_or()
     return left
 end
 
--- Parses logical AND expressions
 function Parser:parse_logic_and()
     local left = self:parse_equality()
     while self:match("keyword", "and") do
@@ -466,7 +438,6 @@ function Parser:parse_logic_and()
     return left
 end
 
--- Parses equality expressions
 function Parser:parse_equality()
     local left = self:parse_compare()
     while true do
@@ -483,7 +454,6 @@ function Parser:parse_equality()
     return left
 end
 
--- Parses comparison expressions
 function Parser:parse_compare()
     local left = self:parse_term()
     while true do
@@ -506,7 +476,6 @@ function Parser:parse_compare()
     return left
 end
 
--- Parses additive expressions
 function Parser:parse_term()
     local left = self:parse_factor()
     while true do
@@ -523,7 +492,6 @@ function Parser:parse_term()
     return left
 end
 
--- Parses multiplicative expressions
 function Parser:parse_factor()
     local left = self:parse_unary()
     while true do
@@ -543,7 +511,6 @@ function Parser:parse_factor()
     return left
 end
 
--- Parses unary operators
 function Parser:parse_unary()
     local tok = self:peek(0)
     if self:match("keyword", "not") then
@@ -559,7 +526,6 @@ function Parser:parse_unary()
     return self:parse_power()
 end
 
--- Parses exponentiation with right associativity
 function Parser:parse_power()
     local left = self:parse_call()
     if self:match("symbol", "^") then
@@ -569,7 +535,6 @@ function Parser:parse_power()
     return left
 end
 
--- Parses calls and indexing chains
 function Parser:parse_call()
     local expr = self:parse_primary()
     while true do
@@ -599,7 +564,6 @@ function Parser:parse_call()
     return expr
 end
 
--- Parses literals, identifiers, grouping, and table literals
 function Parser:parse_primary()
     local tok = self:peek(0)
     if tok.type == "ident" then
@@ -632,7 +596,6 @@ function Parser:parse_primary()
     error_at(tok, "unexpected token in expression")
 end
 
--- Parses a literal token into an AST node
 function Parser:parse_literal()
     local tok = self:peek(0)
     if tok.type == "number" then
@@ -653,7 +616,6 @@ function Parser:parse_literal()
     error_at(tok, "expected literal")
 end
 
--- Parses a table constructor
 function Parser:parse_table()
     local start = self:expect("symbol", "{")
     local fields = {}
@@ -686,7 +648,6 @@ function Parser:parse_table()
     return { kind = "Table", fields = fields, span = span_from(start, fields[#fields] and fields[#fields].value.span or span_of(start)) }
 end
 
--- Parses an lvalue for assignment
 function Parser:parse_lvalue()
     local base = self:expect("ident").value
     local node = { kind = "Ident", name = base }
@@ -705,7 +666,6 @@ function Parser:parse_lvalue()
     return node
 end
 
--- Parses a type expression with unions
 function Parser:parse_type_expr()
     local left = self:parse_type_primary()
     while self:match("symbol", "|") do
@@ -715,7 +675,6 @@ function Parser:parse_type_expr()
     return left
 end
 
--- Parses a comma-separated type list
 function Parser:parse_type_list()
     local items = {}
     if not self:match("symbol", ")") then
@@ -728,7 +687,6 @@ function Parser:parse_type_list()
     return items
 end
 
--- Parses a primary type expression
 function Parser:parse_type_primary()
     local tok = self:peek(0)
     if tok.type == "ident" then
